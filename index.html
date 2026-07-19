@@ -30,11 +30,27 @@
 
       <div class="form-row">
         <label>Hometown Team</label>
-        <div class="choice-group" id="schoolChoice">
-          <button class="choice" data-value="Ironwood High">Ironwood High</button>
-          <button class="choice" data-value="Lakeside High">Lakeside High</button>
-          <button class="choice" data-value="Central High">Central High</button>
+        <div class="choice-group" id="schoolChoice"></div>
+      </div>
+
+      <div class="form-row roster-row">
+        <label>Custom Roster (optional)</label>
+        <p class="roster-hint">
+          Import your own teams &amp; players as JSON — logos, colors, and names are
+          entirely up to you. <button type="button" id="btnShowSchema" class="link-btn">View JSON format</button>
+        </p>
+        <div class="roster-controls">
+          <label class="file-btn">
+            Upload roster.json
+            <input type="file" id="rosterFile" accept="application/json,.json" hidden />
+          </label>
+          <button type="button" id="btnPasteJson" class="link-btn">Paste JSON instead</button>
+          <button type="button" id="btnClearRoster" class="link-btn">Use default rosters</button>
         </div>
+        <textarea id="rosterPaste" class="roster-paste" rows="8" placeholder="Paste roster JSON here..." hidden></textarea>
+        <button type="button" id="btnApplyPaste" class="action-btn" hidden>Apply Pasted JSON</button>
+        <div id="rosterStatus" class="roster-status"></div>
+        <pre id="rosterSchema" class="roster-schema" hidden></pre>
       </div>
 
       <button id="btnStart" class="btn-primary" disabled>Begin Career</button>

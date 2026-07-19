@@ -31,6 +31,156 @@ const MAX_STRUGGLE_YEARS_DRAFTED = 3;
 const MAX_STRUGGLE_YEARS_UDFA = 2;
 
 /* ------------------------------------------------------------------ */
+/* Roster (teams & players) — built-in fallback + JSON import           */
+/* ------------------------------------------------------------------ */
+
+const ROSTER_STORAGE_KEY = 'gridironCustomRoster';
+const DEFAULT_COLORS = ['#ff6b35', '#141d31'];
+
+// College tiers, from best to worst, used to match a recruit's star rating
+// to a pool of custom teams if the imported JSON tags teams with a tier.
+const COLLEGE_TIERS = ['elite', 'power', 'g5', 'fcs', 'small'];
+
+const DEFAULT_ROSTER = {
+  highSchoolTeams: [
+    { name: 'Ironwood High', logo: '🌲', colors: ['#ff6b35', '#141d31'] },
+    { name: 'Lakeside High', logo: '🌊', colors: ['#2dd4bf', '#141d31'] },
+    { name: 'Central High', logo: '⭐', colors: ['#eef2ff', '#141d31'] },
+  ],
+  collegeTeams: [
+    { name: 'State University', logo: '🦅', colors: ['#ff6b35', '#141d31'], tier: 'elite' },
+    { name: 'Tech', logo: '⚙️', colors: ['#2dd4bf', '#141d31'], tier: 'power' },
+    { name: 'A&M', logo: '🐎', colors: ['#f87171', '#141d31'], tier: 'power' },
+    { name: 'Central University', logo: '🦁', colors: ['#facc15', '#141d31'], tier: 'g5' },
+    { name: 'Coastal University', logo: '🌴', colors: ['#38bdf8', '#141d31'], tier: 'g5' },
+    { name: 'Northern State', logo: '❄️', colors: ['#94a3b8', '#141d31'], tier: 'fcs' },
+    { name: 'Valley College', logo: '⛰️', colors: ['#84cc16', '#141d31'], tier: 'small' },
+  ],
+  nflTeams: [
+    { name: 'Ironclads', logo: '⚙️', colors: ['#94a3b8', '#141d31'] },
+    { name: 'Sentinels', logo: '🛡️', colors: ['#2dd4bf', '#141d31'] },
+    { name: 'Coyotes', logo: '🐺', colors: ['#f97316', '#141d31'] },
+    { name: 'Marauders', logo: '🏴', colors: ['#ef4444', '#141d31'] },
+    { name: 'Voyagers', logo: '🧭', colors: ['#3b82f6', '#141d31'] },
+    { name: 'Bison', logo: '🦬', colors: ['#a16207', '#141d31'] },
+    { name: 'Titans', logo: '⚡', colors: ['#facc15', '#141d31'] },
+    { name: 'Harbor Kings', logo: '⚓', colors: ['#0ea5e9', '#141d31'] },
+  ],
+  rivals: [],
+};
+
+// Placeholder-only example shown to the user — no real team or player data.
+const ROSTER_SCHEMA_EXAMPLE = {
+  highSchoolTeams: [
+    { name: 'Your High School Name', logo: '🏈', colors: ['#ff6b35', '#141d31'] },
+    { name: 'https://yourimagehost.com/logo.png works too', logo: 'https://example.com/logo.png', colors: ['#2dd4bf', '#141d31'] },
+  ],
+  collegeTeams: [
+    { name: 'Your College Name', logo: '🎓', colors: ['#ff0000', '#111111'], tier: 'elite', quality: 0.85 },
+  ],
+  nflTeams: [
+    { name: 'Your NFL Team Name', logo: '🏆', colors: ['#0000ff', '#ffffff'], quality: 0.7 },
+  ],
+  rivals: [
+    { name: 'Some Opposing Player', position: 'QB' },
+  ],
+};
+
+let customRoster = null;
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function getTeamPool(kind) {
+  if (customRoster && Array.isArray(customRoster[kind]) && customRoster[kind].length) {
+    return customRoster[kind];
+  }
+  return DEFAULT_ROSTER[kind];
+}
+
+function getRivalPool() {
+  if (customRoster && Array.isArray(customRoster.rivals) && customRoster.rivals.length) {
+    return customRoster.rivals;
+  }
+  return DEFAULT_ROSTER.rivals;
+}
+
+function safeCssColor(c) {
+  return (typeof c === 'string' && /^[#a-zA-Z0-9(),.%\s-]{1,40}$/.test(c)) ? c : null;
+}
+
+function teamLogoHtml(team, size) {
+  size = size || '28px';
+  if (!team) return '';
+  const rawColors = (team.colors && team.colors.length >= 2) ? team.colors : DEFAULT_COLORS;
+  const colors = [safeCssColor(rawColors[0]) || DEFAULT_COLORS[0], safeCssColor(rawColors[1]) || DEFAULT_COLORS[1]];
+  const logo = team.logo;
+  if (typeof logo === 'string' && /^(https?:|data:image\/)/i.test(logo.trim())) {
+    return `<img class="team-logo" style="width:${size};height:${size}" src="${escapeHtml(logo.trim())}" alt="" onerror="this.style.display='none'" />`;
+  }
+  const initials = (logo && String(logo).trim())
+    || String(team.name || '').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  return `<span class="team-logo-badge" style="width:${size};height:${size};background:${colors[1]};color:${colors[0]};border:1px solid ${colors[0]}">${escapeHtml(initials)}</span>`;
+}
+
+function validateRoster(data) {
+  if (!data || typeof data !== 'object') return 'Roster JSON must be an object.';
+  const listFields = ['highSchoolTeams', 'collegeTeams', 'nflTeams', 'rivals'];
+  let anyProvided = false;
+  for (const field of listFields) {
+    if (data[field] === undefined) continue;
+    if (!Array.isArray(data[field])) return `"${field}" must be an array.`;
+    anyProvided = true;
+    for (const entry of data[field]) {
+      if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) {
+        return `Every entry in "${field}" needs at least a "name" string.`;
+      }
+      if (entry.colors && (!Array.isArray(entry.colors) || entry.colors.length < 2)) {
+        return `"colors" for "${entry.name}" must be an array of at least 2 color strings.`;
+      }
+      if (entry.quality !== undefined && (typeof entry.quality !== 'number' || entry.quality < 0 || entry.quality > 1)) {
+        return `"quality" for "${entry.name}" must be a number between 0 and 1.`;
+      }
+    }
+  }
+  if (!anyProvided) return 'Roster JSON did not contain any of: highSchoolTeams, collegeTeams, nflTeams, rivals.';
+  return null;
+}
+
+function applyRoster(data, persist) {
+  customRoster = data;
+  if (persist) {
+    try { localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
+  }
+  renderSchoolChoices();
+}
+
+function clearRoster() {
+  customRoster = null;
+  try { localStorage.removeItem(ROSTER_STORAGE_KEY); } catch (e) { /* storage unavailable */ }
+  renderSchoolChoices();
+  setRosterStatus('Using default rosters.', 'ok');
+}
+
+function loadRosterFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROSTER_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!validateRoster(data)) customRoster = data;
+  } catch (e) { /* ignore corrupt storage */ }
+}
+
+function setRosterStatus(msg, cls) {
+  const box = el('rosterStatus');
+  box.textContent = msg;
+  box.className = `roster-status ${cls || ''}`;
+}
+
+/* ------------------------------------------------------------------ */
 /* State                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -48,7 +198,7 @@ function freshState() {
     },
     stage: 'HS',      // HS -> College -> NFL
     year: 1,
-    team: { name: '', quality: 0.5 },
+    team: { name: '', quality: 0.5, logo: '', colors: DEFAULT_COLORS },
     gamesRemaining: 0,
     trainingRoundsRemaining: 0,
     restUsedThisSeason: 0,
@@ -104,7 +254,7 @@ function showScreen(id) {
 /* ------------------------------------------------------------------ */
 
 let chosenPosition = null;
-let chosenSchool = null;
+let chosenSchoolIndex = null;
 
 function initStartScreen() {
   document.querySelectorAll('#positionChoice .choice').forEach((btn) => {
@@ -116,38 +266,112 @@ function initStartScreen() {
     });
   });
 
-  document.querySelectorAll('#schoolChoice .choice').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#schoolChoice .choice').forEach((b) => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      chosenSchool = btn.dataset.value;
-      updateStartButton();
-    });
-  });
+  loadRosterFromStorage();
+  renderSchoolChoices();
 
   el('playerName').addEventListener('input', updateStartButton);
   el('btnStart').addEventListener('click', startCareer);
   el('btnRestart').addEventListener('click', () => {
     chosenPosition = null;
-    chosenSchool = null;
-    document.querySelectorAll('.choice').forEach((b) => b.classList.remove('selected'));
+    chosenSchoolIndex = null;
+    document.querySelectorAll('#positionChoice .choice').forEach((b) => b.classList.remove('selected'));
     el('playerName').value = '';
+    renderSchoolChoices();
     updateStartButton();
     showScreen('screen-start');
   });
+
+  el('btnShowSchema').addEventListener('click', () => {
+    const box = el('rosterSchema');
+    if (box.hidden) {
+      box.textContent = JSON.stringify(ROSTER_SCHEMA_EXAMPLE, null, 2);
+      box.hidden = false;
+    } else {
+      box.hidden = true;
+    }
+  });
+
+  el('rosterFile').addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => handleRosterJsonText(reader.result);
+    reader.onerror = () => setRosterStatus('Could not read that file.', 'err');
+    reader.readAsText(file);
+    evt.target.value = '';
+  });
+
+  el('btnPasteJson').addEventListener('click', () => {
+    el('rosterPaste').hidden = !el('rosterPaste').hidden;
+    el('btnApplyPaste').hidden = el('rosterPaste').hidden;
+  });
+
+  el('btnApplyPaste').addEventListener('click', () => {
+    handleRosterJsonText(el('rosterPaste').value);
+  });
+
+  el('btnClearRoster').addEventListener('click', clearRoster);
+}
+
+function handleRosterJsonText(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    setRosterStatus('Invalid JSON — check for a syntax error.', 'err');
+    return;
+  }
+  const error = validateRoster(data);
+  if (error) {
+    setRosterStatus(error, 'err');
+    return;
+  }
+  applyRoster(data, true);
+  const counts = ['highSchoolTeams', 'collegeTeams', 'nflTeams', 'rivals']
+    .map((k) => `${(data[k] || []).length} ${k}`)
+    .join(', ');
+  setRosterStatus(`Roster loaded: ${counts}.`, 'ok');
+}
+
+function renderSchoolChoices() {
+  const container = el('schoolChoice');
+  const pool = getTeamPool('highSchoolTeams');
+  container.innerHTML = '';
+  pool.forEach((team, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'choice';
+    btn.dataset.index = String(idx);
+    btn.innerHTML = `${teamLogoHtml(team, '22px')}<span>${escapeHtml(team.name)}</span>`;
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.choice').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      chosenSchoolIndex = idx;
+      updateStartButton();
+    });
+    container.appendChild(btn);
+  });
+  chosenSchoolIndex = null;
+  updateStartButton();
 }
 
 function updateStartButton() {
   const nameOk = el('playerName').value.trim().length > 0;
-  el('btnStart').disabled = !(nameOk && chosenPosition && chosenSchool);
+  el('btnStart').disabled = !(nameOk && chosenPosition && chosenSchoolIndex !== null);
 }
 
 function startCareer() {
   state = freshState();
   state.player.name = el('playerName').value.trim();
   state.player.position = chosenPosition;
-  state.team.name = chosenSchool;
-  state.team.quality = rand(0.4, 0.6);
+
+  const hsTeam = getTeamPool('highSchoolTeams')[chosenSchoolIndex];
+  state.team = {
+    name: hsTeam.name,
+    logo: hsTeam.logo,
+    colors: hsTeam.colors || DEFAULT_COLORS,
+    quality: typeof hsTeam.quality === 'number' ? hsTeam.quality : rand(0.4, 0.6),
+  };
 
   // slight starting bias toward position-relevant attributes
   const w = POSITIONS[state.player.position].weights;
@@ -156,7 +380,7 @@ function startCareer() {
   }
   state.player.attrs.stamina = randInt(35, 55);
 
-  log(`Welcome to ${state.team.name}, ${state.player.name}. Your journey to NFL MVP starts now.`, 'highlight');
+  log(`Welcome to ${escapeHtml(state.team.name)}, ${escapeHtml(state.player.name)}. Your journey to NFL MVP starts now.`, 'highlight');
   showScreen('screen-game');
   beginYear();
 }
@@ -233,7 +457,7 @@ function doTraining(key, gain, label) {
   state.trainingRoundsRemaining -= 1;
   if (state.trainingRoundsRemaining <= 0) {
     state.phase = 'game';
-    log(`Camp is over. Season kicks off for ${state.team.name}.`, 'highlight');
+    log(`Camp is over. Season kicks off for ${escapeHtml(state.team.name)}.`, 'highlight');
   }
   render();
 }
@@ -279,8 +503,8 @@ function restWeek() {
   state.player.energy = clamp(state.player.energy + 40, 0, 100);
   state.gamesRemaining -= 1;
   const teamWin = Math.random() < clamp(0.4 + state.team.quality * 0.3, 0.1, 0.85);
-  if (teamWin) { state.seasonStats.wins++; state.careerStats.wins++; log(`You sat out this week. ${state.team.name} won without you.`, 'good'); }
-  else { state.seasonStats.losses++; state.careerStats.losses++; log(`You sat out this week. ${state.team.name} lost a tough one.`, 'bad'); }
+  if (teamWin) { state.seasonStats.wins++; state.careerStats.wins++; log(`You sat out this week. ${escapeHtml(state.team.name)} won without you.`, 'good'); }
+  else { state.seasonStats.losses++; state.careerStats.losses++; log(`You sat out this week. ${escapeHtml(state.team.name)} lost a tough one.`, 'bad'); }
   state.seasonStats.games++;
   state.careerStats.games++;
   if (state.gamesRemaining <= 0) endSeason();
@@ -291,8 +515,8 @@ function playOneGame() {
     state.player.gamesOutRemaining -= 1;
     state.gamesRemaining -= 1;
     const teamWin = Math.random() < clamp(0.4 + state.team.quality * 0.3, 0.1, 0.85);
-    if (teamWin) { state.seasonStats.wins++; state.careerStats.wins++; log(`Sidelined with injury. ${state.team.name} pulled out a win.`, 'good'); }
-    else { state.seasonStats.losses++; state.careerStats.losses++; log(`Sidelined with injury. ${state.team.name} came up short.`, 'bad'); }
+    if (teamWin) { state.seasonStats.wins++; state.careerStats.wins++; log(`Sidelined with injury. ${escapeHtml(state.team.name)} pulled out a win.`, 'good'); }
+    else { state.seasonStats.losses++; state.careerStats.losses++; log(`Sidelined with injury. ${escapeHtml(state.team.name)} came up short.`, 'bad'); }
     state.seasonStats.games++;
     state.careerStats.games++;
     if (state.gamesRemaining <= 0) endSeason();
@@ -374,7 +598,17 @@ function logGameResult(win, line, performance) {
   const resultWord = win ? 'W' : 'L';
   const cls = performance > 0.75 ? 'good' : (performance < 0.35 ? 'bad' : '');
   const flavor = performance > 0.85 ? ' What a performance!' : (performance < 0.25 ? ' A rough day at the office.' : '');
-  log(`Game result: <b>${resultWord}</b> — ${parts.join(', ') || 'quiet stat line'}.${flavor}`, cls);
+
+  const rivals = getRivalPool();
+  let rivalNote = '';
+  if (rivals.length) {
+    const rival = pick(rivals);
+    rivalNote = performance > 0.6
+      ? ` Outplayed ${escapeHtml(rival.name)} on the other side of the ball.`
+      : ` ${escapeHtml(rival.name)} had an answer all game.`;
+  }
+
+  log(`Game result: <b>${resultWord}</b> — ${parts.join(', ') || 'quiet stat line'}.${flavor}${rivalNote}`, cls);
 }
 
 function maybeInjury(levelInfo) {
@@ -504,21 +738,27 @@ function careerAvgPerfForStage(stage) {
   return null;
 }
 
+function pickTeamForTier(pool, tierKey, qualityRange) {
+  const matches = pool.filter((t) => t.tier === tierKey);
+  const team = pick(matches.length ? matches : pool);
+  const quality = typeof team.quality === 'number' ? team.quality : rand(...qualityRange);
+  return { name: team.name, logo: team.logo, colors: team.colors || DEFAULT_COLORS, quality: clamp(quality, 0, 1) };
+}
+
 function doRecruiting() {
   const hsAwards = state.careerAwards.filter((a) => a.stage === 'HS').length;
   const score = state.pendingAvgPerf * 70 + hsAwards * 8 + attrTotal(state.player.attrs) / 5;
 
-  let stars, tierName, qualityRange;
-  if (score > 85) { stars = 5; tierName = 'Elite Power Conference program'; qualityRange = [0.75, 0.9]; }
-  else if (score > 70) { stars = 4; tierName = 'Power Conference program'; qualityRange = [0.6, 0.75]; }
-  else if (score > 55) { stars = 3; tierName = 'Group of Five program'; qualityRange = [0.5, 0.65]; }
-  else if (score > 40) { stars = 2; tierName = 'FCS program'; qualityRange = [0.4, 0.55]; }
-  else { stars = 1; tierName = 'Small College (walk-on)'; qualityRange = [0.3, 0.45]; }
+  let stars, tierName, tierKey, qualityRange;
+  if (score > 85) { stars = 5; tierName = 'Elite Power Conference program'; tierKey = 'elite'; qualityRange = [0.75, 0.9]; }
+  else if (score > 70) { stars = 4; tierName = 'Power Conference program'; tierKey = 'power'; qualityRange = [0.6, 0.75]; }
+  else if (score > 55) { stars = 3; tierName = 'Group of Five program'; tierKey = 'g5'; qualityRange = [0.5, 0.65]; }
+  else if (score > 40) { stars = 2; tierName = 'FCS program'; tierKey = 'fcs'; qualityRange = [0.4, 0.55]; }
+  else { stars = 1; tierName = 'Small College (walk-on)'; tierKey = 'small'; qualityRange = [0.3, 0.45]; }
 
-  const collegeNames = ['State University', 'Tech', 'A&M', 'Central University', 'Coastal University'];
-  state.team = { name: `${pick(collegeNames)}`, quality: rand(...qualityRange) };
+  state.team = pickTeamForTier(getTeamPool('collegeTeams'), tierKey, qualityRange);
   log(`— RECRUITING —`, 'highlight');
-  log(`You earned a ${stars}-star rating and signed with a ${tierName}: ${state.team.name}.`, 'highlight');
+  log(`You earned a ${stars}-star rating and signed with a ${tierName}: ${escapeHtml(state.team.name)}.`, 'highlight');
 
   state.stage = 'College';
   state.year = 1;
@@ -538,14 +778,20 @@ function doDraft() {
   else round = 'UDFA';
 
   state.player.draftedRound = round;
-  const nflTeams = ['Ironclads', 'Sentinels', 'Coyotes', 'Marauders', 'Voyagers', 'Bison', 'Titans', 'Harbor Kings'];
-  state.team = { name: pick(nflTeams), quality: rand(0.4, 0.85) };
+  const nflPool = getTeamPool('nflTeams');
+  const nflTeam = pick(nflPool);
+  state.team = {
+    name: nflTeam.name,
+    logo: nflTeam.logo,
+    colors: nflTeam.colors || DEFAULT_COLORS,
+    quality: typeof nflTeam.quality === 'number' ? nflTeam.quality : rand(0.4, 0.85),
+  };
 
   log(`— NFL DRAFT —`, 'highlight');
   if (round === 'UDFA') {
-    log(`Undrafted. You sign as a free agent with the ${state.team.name}, ready to prove everyone wrong.`, 'highlight');
+    log(`Undrafted. You sign as a free agent with the ${escapeHtml(state.team.name)}, ready to prove everyone wrong.`, 'highlight');
   } else {
-    log(`Drafted in Round ${round} by the ${state.team.name}!`, 'highlight');
+    log(`Drafted in Round ${round} by the ${escapeHtml(state.team.name)}!`, 'highlight');
   }
 
   state.stage = 'NFL';
@@ -584,6 +830,8 @@ function endGame(reason) {
     : `<p>No major awards, but every rep built the legend.</p>`;
 
   el('endSummary').innerHTML = `
+    <h3>Final Team</h3>
+    <div class="hud-team-row">${teamLogoHtml(state.team, '32px')}<span>${escapeHtml(state.team.name)}</span></div>
     <h3>Career Totals</h3>
     <div class="stats-grid">
       <div class="stat-box"><div class="val">${c.passYds}</div><div class="lbl">Pass Yds</div></div>
@@ -615,7 +863,7 @@ function render() {
     ? ` (${state.player.draftedRound === 'UDFA' ? 'UDFA' : 'Round ' + state.player.draftedRound})`
     : '';
   el('hudMeta').textContent = `${stageLabel} — Year ${state.year}${roundNote}`;
-  el('hudTeam').textContent = state.team.name;
+  el('hudTeam').innerHTML = `<span class="hud-team-row">${teamLogoHtml(state.team, '20px')}<span>${escapeHtml(state.team.name)}</span></span>`;
   el('hudRecord').textContent = `${state.seasonStats.wins}-${state.seasonStats.losses} this season`;
 
   renderAttrs();

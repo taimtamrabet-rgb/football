@@ -1,0 +1,19 @@
+{
+  "highSchoolTeams": [
+    { "name": "Your High School Name", "logo": "🏈", "colors": ["#ff6b35", "#141d31"] },
+    { "name": "Another High School", "logo": "https://yourimagehost.com/logo.png", "colors": ["#2dd4bf", "#141d31"] }
+  ],
+  "collegeTeams": [
+    { "name": "Your College Name", "logo": "🎓", "colors": ["#c8102e", "#111111"], "tier": "elite", "quality": 0.85 },
+    { "name": "Another College", "logo": "🐯", "colors": ["#f5811f", "#0c1c2c"], "tier": "power" },
+    { "name": "A Smaller Program", "logo": "🦊", "colors": ["#5c4a99", "#111111"], "tier": "g5" }
+  ],
+  "nflTeams": [
+    { "name": "Your NFL Team Name", "logo": "🏆", "colors": ["#013369", "#d50a0a"], "quality": 0.7 },
+    { "name": "Another NFL Team", "logo": "https://yourimagehost.com/nfl-logo.png", "colors": ["#004c54", "#a5acaf"] }
+  ],
+  "rivals": [
+    { "name": "Some Opposing Player", "position": "QB" },
+    { "name": "Another Rival", "position": "WR" }
+  ]
+}

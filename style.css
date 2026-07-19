@@ -118,6 +118,108 @@ h3 {
   font-weight: 600;
 }
 
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- Roster import --- */
+.roster-row { margin-top: 8px; }
+
+.roster-hint {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--accent); }
+
+.roster-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.file-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.file-btn:hover { border-color: var(--accent-2); }
+
+.roster-paste {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.roster-status {
+  font-size: 0.85rem;
+  min-height: 1.2em;
+  margin-bottom: 6px;
+}
+.roster-status.ok { color: var(--good); }
+.roster-status.err { color: var(--bad); }
+
+.roster-schema {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-dim);
+}
+
+.team-logo {
+  display: inline-block;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.team-logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.hud-team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .btn-primary {
   width: 100%;
   padding: 14px;
