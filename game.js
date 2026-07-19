@@ -435,6 +435,7 @@ function updateStartButton() {
 }
 
 const STAR_LABELS = { 1: 'Longshot', 2: 'Under the Radar', 3: 'Solid Prospect', 4: 'Blue Chip', 5: 'Five-Star Phenom' };
+const STAR_OVR = { 1: 50, 2: 60, 3: 70, 4: 80, 5: 90 };
 
 function startCareer() {
   state = freshState();
@@ -450,14 +451,17 @@ function startCareer() {
     quality: typeof hsTeam.quality === 'number' ? hsTeam.quality : rand(0.4, 0.6),
   };
 
-  // slight starting bias toward position-relevant attributes, shifted by
-  // the chosen star rating (1 = raw talent penalty, 5 = big head start)
-  const starBonus = (chosenStars - 3) * 6;
-  const w = POSITIONS[state.player.position].weights;
+  // Star rating maps directly to starting OVR (1★=50 ... 5★=90). Back-solve
+  // the rating-relevant attributes so computeOVR() lands exactly on target —
+  // the position weights always sum to 1, so setting every rating attribute
+  // to the same value reproduces that rating exactly.
+  const targetOvr = STAR_OVR[chosenStars];
+  const targetRating = (targetOvr - 40) / 59;
+  const baseAttr = clamp(Math.round(targetRating * 99), 15, 99);
   for (const k of ['speed', 'strength', 'skill', 'awareness']) {
-    state.player.attrs[k] = clamp(Math.round(35 + w[k] * 60 + starBonus + rand(-5, 5)), 15, 75);
+    state.player.attrs[k] = baseAttr;
   }
-  state.player.attrs.stamina = clamp(randInt(35, 55) + Math.round(starBonus / 2), 15, 75);
+  state.player.attrs.stamina = clamp(Math.round(35 + (chosenStars - 1) * 10 + rand(-5, 5)), 15, 85);
 
   log(`Welcome to ${escapeHtml(state.team.name)}, ${escapeHtml(state.player.name)}. Entering as a ${chosenStars}-star recruit (${STAR_LABELS[chosenStars]}). Your journey to NFL MVP starts now.`, 'highlight');
   showScreen('screen-game');
