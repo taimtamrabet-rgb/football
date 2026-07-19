@@ -229,6 +229,166 @@ h3 {
   justify-content: flex-end;
 }
 
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --- OVR badge --- */
+.ovr-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  background: rgba(255, 107, 53, 0.08);
+  flex-shrink: 0;
+}
+.ovr-badge .ovr-num { font-weight: 800; }
+.ovr-badge .ovr-lbl { text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+
+.ovr-sm { width: 42px; height: 42px; }
+.ovr-sm .ovr-num { font-size: 1rem; }
+.ovr-sm .ovr-lbl { font-size: 0.5rem; }
+
+.ovr-md { width: 58px; height: 58px; }
+.ovr-md .ovr-num { font-size: 1.35rem; }
+.ovr-md .ovr-lbl { font-size: 0.55rem; }
+
+.ovr-lg { width: 84px; height: 84px; border-radius: 14px; }
+.ovr-lg .ovr-num { font-size: 2rem; }
+.ovr-lg .ovr-lbl { font-size: 0.65rem; }
+
+/* --- Team Hub button + screen --- */
+.hub-open-btn {
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.hub-open-btn:hover { border-color: var(--accent-2); }
+
+.hub-topbar { margin-bottom: 14px; }
+
+.hub-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.hub-hero-name { font-size: 1.25rem; font-weight: 700; }
+.hub-hero-meta { color: var(--text-dim); font-size: 0.85rem; margin-top: 2px; }
+.hub-hero-team { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.9rem; }
+.hub-health { margin-top: 6px; font-size: 0.8rem; color: var(--text-dim); }
+.hub-health.good { color: var(--good); }
+.hub-health.bad { color: var(--bad); }
+
+.hub-list { display: flex; flex-direction: column; gap: 10px; }
+
+.hub-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.hub-card:hover { border-color: var(--accent-2); }
+
+.hub-card-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 1.2rem;
+}
+
+.hub-card-text { flex: 1; display: flex; flex-direction: column; }
+.hub-card-title { font-weight: 600; }
+.hub-card-subtitle { color: var(--text-dim); font-size: 0.8rem; margin-top: 2px; }
+.hub-card-chevron { color: var(--text-dim); font-size: 1.3rem; }
+
+.hub-back { display: inline-block; margin-bottom: 14px; }
+
+.hub-projection { font-size: 1.4rem; letter-spacing: 2px; }
+
+.hub-history-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.hub-history-row:last-child { border-bottom: none; }
+.hub-history-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.hub-history-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.hub-history-ovr { margin-left: auto; color: var(--accent-2); }
+
+/* --- Mini-game --- */
+.minigame { width: 100%; }
+.minigame-prompt { color: var(--text-dim); margin: 0 0 12px; font-size: 0.9rem; }
+
+.minigame-track {
+  position: relative;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.minigame-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(74, 222, 128, 0.25);
+  border-left: 2px solid var(--good);
+  border-right: 2px solid var(--good);
+}
+
+.minigame-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(255, 107, 53, 0.7);
+  transform: translateX(-50%);
+  left: 0;
+}
+
+.minigame-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .btn-primary {
   width: 100%;
   padding: 14px;

@@ -81,12 +81,16 @@
     <section id="screen-game" class="screen">
       <header id="hud">
         <div class="hud-left">
-          <div id="hudName" class="hud-name"></div>
-          <div id="hudMeta" class="hud-meta"></div>
+          <div id="hudOvr"></div>
+          <div>
+            <div id="hudName" class="hud-name"></div>
+            <div id="hudMeta" class="hud-meta"></div>
+          </div>
         </div>
         <div class="hud-right">
           <div id="hudTeam" class="hud-team"></div>
           <div id="hudRecord" class="hud-record"></div>
+          <button type="button" id="btnOpenHub" class="hub-open-btn">🗂 Team Hub</button>
         </div>
       </header>
 
@@ -118,6 +122,14 @@
       <p id="endSubtitle" class="tagline"></p>
       <div id="endSummary" class="panel"></div>
       <button id="btnRestart" class="btn-primary">Start New Career</button>
+    </section>
+
+    <!-- TEAM HUB SCREEN -->
+    <section id="screen-hub" class="screen">
+      <div class="hub-topbar">
+        <button type="button" id="btnHubBack" class="link-btn">← Back to Game</button>
+      </div>
+      <div id="hubContent" class="panel"></div>
     </section>
 
   </div>

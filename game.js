@@ -249,8 +249,12 @@ function freshState() {
     seasonPerfCount: 0,
     careerStats: emptyStatLine(),
     careerAwards: [],
+    seasonHistory: [],
+    gameLog: [],
+    hubView: null,
+    miniGame: null,
     logEntries: [],
-    phase: 'training', // training | game | seasonEnd | ended
+    phase: 'training', // training | game | minigame | seasonEnd | ended
     endReason: null,
   };
 }
@@ -278,6 +282,17 @@ function playerRating(player) {
   const a = player.attrs;
   const raw = a.speed * w.speed + a.strength * w.strength + a.skill * w.skill + a.awareness * w.awareness;
   return clamp(raw / 99, 0, 1);
+}
+
+// Madden-style 40-99 overall rating derived from the same weighted rating
+// used for game simulation.
+function computeOVR(player) {
+  return clamp(Math.round(40 + playerRating(player) * 59), 40, 99);
+}
+
+function ovrBadgeHtml(ovr, size) {
+  const cls = size === 'lg' ? 'ovr-lg' : (size === 'sm' ? 'ovr-sm' : 'ovr-md');
+  return `<div class="ovr-badge ${cls}"><span class="ovr-num">${ovr}</span><span class="ovr-lbl">OVR</span></div>`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -537,7 +552,7 @@ function renderGameActions() {
   const playBtn = document.createElement('button');
   playBtn.className = 'action-btn primary';
   playBtn.innerHTML = `Play Next Game<small>${state.gamesRemaining} remaining this season</small>`;
-  playBtn.addEventListener('click', () => { playOneGame(); render(); });
+  playBtn.addEventListener('click', startMiniGame);
   container.appendChild(playBtn);
 
   if (state.gamesRemaining > 1) {
@@ -546,7 +561,7 @@ function renderGameActions() {
     simBtn.innerHTML = `Sim Rest of Season<small>Fast-forward to season end</small>`;
     simBtn.addEventListener('click', () => {
       while (state.gamesRemaining > 0 && state.phase === 'game') {
-        playOneGame();
+        playOneGame(autoMiniGameBonus());
       }
       render();
     });
@@ -562,6 +577,120 @@ function renderGameActions() {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Snap-timing mini-game                                                */
+/* ------------------------------------------------------------------ */
+
+const MINI_GAME_CONFIG = {
+  HS: { periodMs: 1500, zoneWidth: 30 },
+  College: { periodMs: 1250, zoneWidth: 22 },
+  NFL: { periodMs: 1000, zoneWidth: 16 },
+};
+
+const MINI_GAME_PROMPTS = {
+  QB: 'Time your throw as the pocket collapses.',
+  RB: 'Time your cut through the hole.',
+  WR: 'Time your release off the line.',
+};
+
+let miniGameRAF = null;
+
+function trianglePos(elapsedMs, periodMs) {
+  const t = (elapsedMs % periodMs) / periodMs;
+  return t < 0.5 ? t * 200 : (1 - t) * 200; // sweeps 0 -> 100 -> 0
+}
+
+function autoMiniGameBonus() {
+  const r = Math.random();
+  if (r < 0.15) return 0.18;
+  if (r < 0.55) return 0.08;
+  if (r < 0.85) return -0.03;
+  return -0.09;
+}
+
+function startMiniGame() {
+  if (state.player.gamesOutRemaining > 0) { playOneGame(); render(); return; }
+  const cfg = MINI_GAME_CONFIG[state.stage];
+  const zoneStart = randInt(6, 94 - cfg.zoneWidth);
+  state.miniGame = { zoneStart, zoneWidth: cfg.zoneWidth, periodMs: cfg.periodMs, startTime: performance.now(), resolved: false };
+  state.phase = 'minigame';
+  render();
+}
+
+function cancelMiniGameLoop() {
+  if (miniGameRAF !== null) { cancelAnimationFrame(miniGameRAF); miniGameRAF = null; }
+}
+
+function runMiniGameLoop() {
+  cancelMiniGameLoop();
+  const step = () => {
+    if (!state.miniGame || state.miniGame.resolved) return;
+    const marker = el('miniGameMarker');
+    if (!marker) return;
+    const elapsed = performance.now() - state.miniGame.startTime;
+    marker.style.left = `${trianglePos(elapsed, state.miniGame.periodMs)}%`;
+    miniGameRAF = requestAnimationFrame(step);
+  };
+  miniGameRAF = requestAnimationFrame(step);
+}
+
+function renderMiniGameActions() {
+  const container = el('actionArea');
+  const mg = state.miniGame;
+  const prompt = MINI_GAME_PROMPTS[state.player.position] || 'Time your read.';
+  container.innerHTML = `
+    <div class="minigame">
+      <p class="minigame-prompt">${escapeHtml(prompt)}</p>
+      <div class="minigame-track">
+        <div class="minigame-zone" style="left:${mg.zoneStart}%;width:${mg.zoneWidth}%"></div>
+        <div class="minigame-marker" id="miniGameMarker"></div>
+      </div>
+      <div class="minigame-buttons">
+        <button type="button" id="btnSnap" class="action-btn primary">Snap!</button>
+        <button type="button" id="btnSkipMiniGame" class="action-btn">Play it safe</button>
+      </div>
+    </div>
+  `;
+  el('btnSnap').addEventListener('click', snapMiniGame);
+  el('btnSkipMiniGame').addEventListener('click', skipMiniGame);
+  runMiniGameLoop();
+}
+
+function snapMiniGame() {
+  if (!state.miniGame || state.miniGame.resolved) return;
+  state.miniGame.resolved = true;
+  cancelMiniGameLoop();
+
+  const elapsed = performance.now() - state.miniGame.startTime;
+  const pos = trianglePos(elapsed, state.miniGame.periodMs);
+  const { zoneStart, zoneWidth } = state.miniGame;
+  const zoneCenter = zoneStart + zoneWidth / 2;
+  const distFromCenter = Math.abs(pos - zoneCenter);
+  const inZone = pos >= zoneStart && pos <= zoneStart + zoneWidth;
+
+  let bonus, tier, cls;
+  if (distFromCenter <= zoneWidth * 0.18) { bonus = 0.18; tier = 'PERFECT!'; cls = 'good'; }
+  else if (inZone) { bonus = 0.08; tier = 'Good read'; cls = 'good'; }
+  else if (distFromCenter <= zoneWidth) { bonus = -0.03; tier = 'A beat late'; cls = ''; }
+  else { bonus = -0.09; tier = 'Blown assignment'; cls = 'bad'; }
+
+  state.phase = 'game';
+  state.miniGame = null;
+  log(`Snap timing: <b>${tier}</b>`, cls);
+  playOneGame(bonus);
+  render();
+}
+
+function skipMiniGame() {
+  if (!state.miniGame || state.miniGame.resolved) return;
+  state.miniGame.resolved = true;
+  cancelMiniGameLoop();
+  state.phase = 'game';
+  state.miniGame = null;
+  playOneGame(0);
+  render();
+}
+
 function restWeek() {
   state.restUsedThisSeason += 1;
   state.player.energy = clamp(state.player.energy + 40, 0, 100);
@@ -574,7 +703,8 @@ function restWeek() {
   if (state.gamesRemaining <= 0) endSeason();
 }
 
-function playOneGame() {
+function playOneGame(bonus) {
+  bonus = bonus || 0;
   if (state.player.gamesOutRemaining > 0) {
     state.player.gamesOutRemaining -= 1;
     state.gamesRemaining -= 1;
@@ -590,7 +720,7 @@ function playOneGame() {
   const levelInfo = LEVELS[state.stage];
   const baseRating = playerRating(state.player);
   const energyPenalty = state.player.energy < 30 ? (30 - state.player.energy) / 150 : 0;
-  const performance = clamp(baseRating + rand(-0.13, 0.13) - energyPenalty, 0.05, 1);
+  const performance = clamp(baseRating + rand(-0.13, 0.13) - energyPenalty + bonus, 0.05, 1);
 
   const opponentQuality = clamp(0.5 + rand(-0.3, 0.3), 0.15, 0.9);
   const winProb = clamp(
@@ -611,6 +741,12 @@ function playOneGame() {
   else { state.seasonStats.losses += 1; state.careerStats.losses += 1; }
 
   state.player.energy = clamp(state.player.energy - randInt(12, 22) + 6, 0, 100);
+
+  state.gameLog.push({
+    stage: state.stage, year: state.year, gameNum: state.seasonStats.games,
+    win, line, performance,
+  });
+  if (state.gameLog.length > 400) state.gameLog.shift();
 
   logGameResult(win, line, performance);
   maybeInjury(levelInfo);
@@ -732,6 +868,17 @@ function endSeason() {
   } else {
     log(`No postseason honors this year. Back to work.`, '');
   }
+
+  state.seasonHistory.push({
+    stage: state.stage,
+    year: state.year,
+    team: { name: state.team.name, logo: state.team.logo, colors: state.team.colors },
+    wins: state.seasonStats.wins,
+    losses: state.seasonStats.losses,
+    awards: awards.slice(),
+    avgPerf,
+    ovr: computeOVR(state.player),
+  });
 
   state.pendingAvgPerf = avgPerf;
   state.pendingWinPct = winPct;
@@ -921,6 +1068,7 @@ function endGame(reason) {
 function render() {
   if (!state || state.phase === 'ended') return;
 
+  el('hudOvr').innerHTML = ovrBadgeHtml(computeOVR(state.player), 'sm');
   el('hudName').textContent = `${state.player.name} — ${POSITIONS[state.player.position].label}`;
   const stageLabel = LEVELS[state.stage].label;
   const roundNote = state.player.draftedRound
@@ -936,6 +1084,7 @@ function render() {
 
   if (state.phase === 'training') renderTrainingActions();
   else if (state.phase === 'game') renderGameActions();
+  else if (state.phase === 'minigame') renderMiniGameActions();
   else if (state.phase === 'seasonEnd') renderSeasonEndActions();
 }
 
@@ -976,7 +1125,248 @@ function renderStatsPanel() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Team Hub                                                              */
+/* ------------------------------------------------------------------ */
+
+function classLabelFor(stage, year) {
+  if (stage === 'HS' || stage === 'College') {
+    return ['Freshman', 'Sophomore', 'Junior', 'Senior'][year - 1] || `Year ${year}`;
+  }
+  return `Year ${year} Pro`;
+}
+
+function healthStatus() {
+  if (state.player.gamesOutRemaining > 0) {
+    return { text: `Injured — out ${state.player.gamesOutRemaining} more game(s)`, cls: 'bad' };
+  }
+  if (state.player.energy < 30) return { text: 'Fatigued', cls: 'bad' };
+  if (state.player.energy < 60) return { text: 'Managing Load', cls: '' };
+  return { text: 'Healthy', cls: 'good' };
+}
+
+function estimateCurrentAvgPerf() {
+  if (state.seasonPerfCount > 0) return state.seasonPerfSum / state.seasonPerfCount;
+  const last = state.seasonHistory[state.seasonHistory.length - 1];
+  return last ? last.avgPerf : 0.5;
+}
+
+function statLineSummary(line) {
+  const parts = [];
+  if (line.passYds) parts.push(`${line.passYds} pass yds${line.passTD ? `, ${line.passTD} TD` : ''}${line.ints ? `, ${line.ints} INT` : ''}`);
+  if (line.rushYds) parts.push(`${line.rushYds} rush yds${line.rushTD ? `, ${line.rushTD} TD` : ''}`);
+  if (line.recYds) parts.push(`${line.receptions} rec, ${line.recYds} yds${line.recTD ? `, ${line.recTD} TD` : ''}`);
+  return parts.join(' · ') || 'Quiet stat line';
+}
+
+function renderHub() {
+  const container = el('hubContent');
+  if (!state) { container.innerHTML = '<p>No active career.</p>'; return; }
+  if (!state.hubView) container.innerHTML = renderHubHome();
+  else if (state.hubView === 'player') container.innerHTML = renderHubPlayerCard();
+  else if (state.hubView === 'training') container.innerHTML = renderHubTrainingView();
+  else if (state.hubView === 'recruiting') container.innerHTML = renderHubRecruitingView();
+  else if (state.hubView === 'history') container.innerHTML = renderHubHistoryView();
+  else if (state.hubView === 'gamelog') container.innerHTML = renderHubGameLogView();
+  else if (state.hubView === 'records') container.innerHTML = renderHubRecordsView();
+
+  container.querySelectorAll('[data-hub-view]').forEach((btn) => {
+    btn.addEventListener('click', () => { state.hubView = btn.dataset.hubView || null; renderHub(); });
+  });
+}
+
+function renderHubHome() {
+  const ovr = computeOVR(state.player);
+  const health = healthStatus();
+  const recruitingLabel = state.stage === 'HS' ? 'Recruiting' : (state.stage === 'College' ? 'Draft Watch' : 'Next-Level Outlook');
+  const recruitingIcon = state.stage === 'HS' ? '🎓' : (state.stage === 'College' ? '🏆' : '📈');
+  const rows = [
+    { view: 'player', icon: '🪪', title: 'Player Card', subtitle: `${ovr} OVR — ${POSITIONS[state.player.position].label}` },
+    { view: 'training', icon: '🏋️', title: 'Training Camp', subtitle: state.phase === 'training' ? `${state.trainingRoundsRemaining} session(s) left` : 'Opens next preseason' },
+    { view: 'recruiting', icon: recruitingIcon, title: recruitingLabel, subtitle: 'Where you project' },
+    { view: 'history', icon: '📅', title: 'Season History', subtitle: `${state.seasonHistory.length} season(s) played` },
+    { view: 'gamelog', icon: '📋', title: 'Game Log', subtitle: 'Every stat line this season' },
+    { view: 'records', icon: '🏆', title: 'Records', subtitle: 'Career totals & awards' },
+  ];
+  return `
+    <div class="hub-hero">
+      ${ovrBadgeHtml(ovr, 'lg')}
+      <div>
+        <div class="hub-hero-name">${escapeHtml(state.player.name)}</div>
+        <div class="hub-hero-meta">${classLabelFor(state.stage, state.year)} • ${POSITIONS[state.player.position].label}</div>
+        <div class="hub-hero-team">${teamLogoHtml(state.team, '18px')}<span>${escapeHtml(state.team.name)}</span></div>
+        <div class="hub-health ${health.cls}">${escapeHtml(health.text)}</div>
+      </div>
+    </div>
+    <div class="hub-list">
+      ${rows.map((r) => `
+        <button type="button" class="hub-card" data-hub-view="${r.view}">
+          <span class="hub-card-icon">${r.icon}</span>
+          <span class="hub-card-text">
+            <span class="hub-card-title">${escapeHtml(r.title)}</span>
+            <span class="hub-card-subtitle">${escapeHtml(r.subtitle)}</span>
+          </span>
+          <span class="hub-card-chevron">›</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderHubPlayerCard() {
+  const ovr = computeOVR(state.player);
+  const attrsHtml = ['speed', 'strength', 'skill', 'awareness', 'stamina'].map((k) => {
+    const label = k === 'skill' ? POSITIONS[state.player.position].skillLabel : ATTR_LABELS[k];
+    return `<div class="attr-item">
+      <div class="attr-name"><span>${label}</span><span>${state.player.attrs[k]}</span></div>
+      <div class="bar"><div class="bar-fill" style="width:${state.player.attrs[k]}%"></div></div>
+    </div>`;
+  }).join('');
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Player Card</h3>
+    <div class="hub-hero">
+      ${ovrBadgeHtml(ovr, 'lg')}
+      <div>
+        <div class="hub-hero-name">${escapeHtml(state.player.name)}</div>
+        <div class="hub-hero-meta">${classLabelFor(state.stage, state.year)} • ${POSITIONS[state.player.position].label} • ${state.player.startingStars}★ recruit</div>
+        <div class="hub-hero-team">${teamLogoHtml(state.team, '18px')}<span>${escapeHtml(state.team.name)}</span></div>
+      </div>
+    </div>
+    <div class="attr-list">${attrsHtml}</div>
+  `;
+}
+
+function renderHubTrainingView() {
+  const inCamp = state.phase === 'training';
+  const msg = inCamp
+    ? `${state.trainingRoundsRemaining} training session(s) left this preseason. Head back to the game screen to make your picks.`
+    : 'Camp is closed for now — it reopens at the start of next preseason.';
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Training Camp</h3>
+    <p>${escapeHtml(msg)}</p>
+  `;
+}
+
+function renderHubRecruitingView() {
+  const avg = estimateCurrentAvgPerf();
+  if (state.stage === 'HS') {
+    const hsAwards = state.careerAwards.filter((a) => a.stage === 'HS').length;
+    const score = avg * 70 + hsAwards * 8 + attrTotal(state.player.attrs) / 5;
+    let stars, tierName;
+    if (score > 85) { stars = 5; tierName = 'Elite Power Conference programs'; }
+    else if (score > 70) { stars = 4; tierName = 'Power Conference programs'; }
+    else if (score > 55) { stars = 3; tierName = 'Group of Five programs'; }
+    else if (score > 40) { stars = 2; tierName = 'FCS programs'; }
+    else { stars = 1; tierName = 'small college programs'; }
+    return `
+      <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+      <h3>Recruiting</h3>
+      <p class="hub-projection">${'⭐'.repeat(stars)}${'☆'.repeat(5 - stars)}</p>
+      <p>Currently projecting as a <b>${stars}-star</b> recruit, drawing interest from ${escapeHtml(tierName)}. Keep performing on Friday nights to move the needle.</p>
+    `;
+  }
+  if (state.stage === 'College') {
+    const collegeAwards = state.careerAwards.filter((a) => a.stage === 'College').length;
+    const score = avg * 70 + collegeAwards * 10 + attrTotal(state.player.attrs) / 5 + state.team.quality * 15;
+    let roundLabel;
+    if (score > 95) roundLabel = 'Round 1';
+    else if (score > 82) roundLabel = 'Round 2';
+    else if (score > 70) roundLabel = 'Rounds 3-4';
+    else if (score > 55) roundLabel = 'Rounds 5-6';
+    else if (score > 42) roundLabel = 'Round 7';
+    else roundLabel = 'Undrafted Free Agent';
+    return `
+      <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+      <h3>Draft Watch</h3>
+      <p>Current projection: <b>${roundLabel}</b></p>
+      <p>Scouts are watching every snap — awards and stat production between now and your final college season will move your stock.</p>
+    `;
+  }
+  const outlook = avg > 0.8 ? 'squarely in the MVP conversation'
+    : avg > 0.6 ? 'a respected star of the league'
+    : avg > 0.4 ? 'a solid starter'
+    : 'fighting to keep your roster spot';
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Next-Level Outlook</h3>
+    <p>Right now, you're playing like ${escapeHtml(outlook)}.</p>
+  `;
+}
+
+function renderHubHistoryView() {
+  const rows = state.seasonHistory.slice().reverse().map((s) => `
+    <div class="hub-history-row">
+      <div class="hub-history-top"><b>${escapeHtml(s.stage)} Yr ${s.year}</b><span>${s.wins}-${s.losses}</span></div>
+      <div class="hub-history-team">
+        ${teamLogoHtml(s.team, '16px')}<span>${escapeHtml(s.team.name)}</span>
+        <span class="hub-history-ovr">${s.ovr} OVR</span>
+      </div>
+      ${s.awards.length ? `<div class="awards-list">${s.awards.map((a) => `<span class="award-chip">${escapeHtml(a)}</span>`).join('')}</div>` : ''}
+    </div>
+  `).join('');
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Season History</h3>
+    ${rows || '<p>No completed seasons yet.</p>'}
+  `;
+}
+
+function renderHubGameLogView() {
+  const games = state.gameLog.filter((g) => g.stage === state.stage && g.year === state.year).slice().reverse();
+  const rows = games.map((g) => `
+    <div class="hub-history-row">
+      <div class="hub-history-top"><b>Game ${g.gameNum}</b><span class="${g.win ? 'good' : 'bad'}">${g.win ? 'W' : 'L'}</span></div>
+      <div>${escapeHtml(statLineSummary(g.line))}</div>
+    </div>
+  `).join('');
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Game Log — ${LEVELS[state.stage].label} Year ${state.year}</h3>
+    ${rows || '<p>No games played yet this season.</p>'}
+  `;
+}
+
+function renderHubRecordsView() {
+  const c = state.careerStats;
+  const awardsHtml = state.careerAwards.length
+    ? `<div class="awards-list">${state.careerAwards.map((a) => `<span class="award-chip">${escapeHtml(a.name)} (${escapeHtml(a.stage)} Yr${a.year})</span>`).join('')}</div>`
+    : '<p>No awards yet — plenty of career left.</p>';
+  return `
+    <button type="button" class="link-btn hub-back" data-hub-view="">← Back</button>
+    <h3>Career Records</h3>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="val">${c.passYds}</div><div class="lbl">Pass Yds</div></div>
+      <div class="stat-box"><div class="val">${c.passTD}</div><div class="lbl">Pass TD</div></div>
+      <div class="stat-box"><div class="val">${c.rushYds}</div><div class="lbl">Rush Yds</div></div>
+      <div class="stat-box"><div class="val">${c.rushTD}</div><div class="lbl">Rush TD</div></div>
+      <div class="stat-box"><div class="val">${c.recYds}</div><div class="lbl">Rec Yds</div></div>
+      <div class="stat-box"><div class="val">${c.recTD}</div><div class="lbl">Rec TD</div></div>
+      <div class="stat-box"><div class="val">${c.wins}</div><div class="lbl">Wins</div></div>
+      <div class="stat-box"><div class="val">${c.losses}</div><div class="lbl">Losses</div></div>
+    </div>
+    <h3>Awards</h3>
+    ${awardsHtml}
+  `;
+}
+
+/* ------------------------------------------------------------------ */
 /* Init                                                                  */
 /* ------------------------------------------------------------------ */
 
-document.addEventListener('DOMContentLoaded', initStartScreen);
+function initGameScreen() {
+  el('btnOpenHub').addEventListener('click', () => {
+    state.hubView = null;
+    renderHub();
+    showScreen('screen-hub');
+  });
+  el('btnHubBack').addEventListener('click', () => {
+    showScreen('screen-game');
+    render();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initStartScreen();
+  initGameScreen();
+});
