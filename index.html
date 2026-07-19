@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gridiron Legend — High School to MVP</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- START SCREEN -->
+    <section id="screen-start" class="screen active">
+      <h1>🏈 Gridiron Legend</h1>
+      <p class="tagline">Freshman year to NFL MVP. One career. Make it count.</p>
+
+      <div class="form-row">
+        <label for="playerName">Player Name</label>
+        <input id="playerName" type="text" maxlength="20" placeholder="e.g. Marcus Reed" />
+      </div>
+
+      <div class="form-row">
+        <label>Position</label>
+        <div class="choice-group" id="positionChoice">
+          <button class="choice" data-value="QB">Quarterback</button>
+          <button class="choice" data-value="RB">Running Back</button>
+          <button class="choice" data-value="WR">Wide Receiver</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Hometown Team</label>
+        <div class="choice-group" id="schoolChoice">
+          <button class="choice" data-value="Ironwood High">Ironwood High</button>
+          <button class="choice" data-value="Lakeside High">Lakeside High</button>
+          <button class="choice" data-value="Central High">Central High</button>
+        </div>
+      </div>
+
+      <button id="btnStart" class="btn-primary" disabled>Begin Career</button>
+    </section>
+
+    <!-- MAIN GAME SCREEN -->
+    <section id="screen-game" class="screen">
+      <header id="hud">
+        <div class="hud-left">
+          <div id="hudName" class="hud-name"></div>
+          <div id="hudMeta" class="hud-meta"></div>
+        </div>
+        <div class="hud-right">
+          <div id="hudTeam" class="hud-team"></div>
+          <div id="hudRecord" class="hud-record"></div>
+        </div>
+      </header>
+
+      <div id="attrPanel" class="panel">
+        <h3>Attributes</h3>
+        <div id="attrList" class="attr-list"></div>
+        <div class="energy-row">
+          <span>Energy</span>
+          <div class="bar"><div id="energyBar" class="bar-fill"></div></div>
+        </div>
+      </div>
+
+      <div id="eventPanel" class="panel event-panel">
+        <div id="eventLog"></div>
+        <div id="actionArea" class="action-area"></div>
+      </div>
+
+      <div id="statsPanel" class="panel">
+        <h3>Season Stats</h3>
+        <div id="statsGrid" class="stats-grid"></div>
+        <h3>Awards</h3>
+        <div id="awardsList" class="awards-list"></div>
+      </div>
+    </section>
+
+    <!-- END SCREEN -->
+    <section id="screen-end" class="screen">
+      <h1 id="endTitle"></h1>
+      <p id="endSubtitle" class="tagline"></p>
+      <div id="endSummary" class="panel"></div>
+      <button id="btnRestart" class="btn-primary">Start New Career</button>
+    </section>
+
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
