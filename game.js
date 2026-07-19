@@ -126,28 +126,70 @@ function teamLogoHtml(team, size) {
   return `<span class="team-logo-badge" style="width:${size};height:${size};background:${colors[1]};color:${colors[0]};border:1px solid ${colors[0]}">${escapeHtml(initials)}</span>`;
 }
 
+function validateTeamList(list, label) {
+  if (!Array.isArray(list)) return `${label} JSON must be an array (or an object like {"teams": [...]}).`;
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) {
+      return `Every ${label} entry needs at least a "name" string.`;
+    }
+    if (entry.colors && (!Array.isArray(entry.colors) || entry.colors.length < 2)) {
+      return `"colors" for "${entry.name}" must be an array of at least 2 color strings.`;
+    }
+    if (entry.quality !== undefined && (typeof entry.quality !== 'number' || entry.quality < 0 || entry.quality > 1)) {
+      return `"quality" for "${entry.name}" must be a number between 0 and 1.`;
+    }
+  }
+  return null;
+}
+
 function validateRoster(data) {
   if (!data || typeof data !== 'object') return 'Roster JSON must be an object.';
   const listFields = ['highSchoolTeams', 'collegeTeams', 'nflTeams', 'rivals'];
   let anyProvided = false;
   for (const field of listFields) {
     if (data[field] === undefined) continue;
-    if (!Array.isArray(data[field])) return `"${field}" must be an array.`;
     anyProvided = true;
-    for (const entry of data[field]) {
-      if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) {
-        return `Every entry in "${field}" needs at least a "name" string.`;
-      }
-      if (entry.colors && (!Array.isArray(entry.colors) || entry.colors.length < 2)) {
-        return `"colors" for "${entry.name}" must be an array of at least 2 color strings.`;
-      }
-      if (entry.quality !== undefined && (typeof entry.quality !== 'number' || entry.quality < 0 || entry.quality > 1)) {
-        return `"quality" for "${entry.name}" must be a number between 0 and 1.`;
-      }
-    }
+    const err = validateTeamList(data[field], field);
+    if (err) return err;
   }
   if (!anyProvided) return 'Roster JSON did not contain any of: highSchoolTeams, collegeTeams, nflTeams, rivals.';
   return null;
+}
+
+// Accepts either a bare array of teams, or an object wrapping it under any
+// reasonable key (e.g. {"teams": [...]} or {"highSchoolTeams": [...]}).
+function extractTeamList(data, key) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data[key])) return data[key];
+    if (Array.isArray(data.teams)) return data.teams;
+  }
+  return null;
+}
+
+function importCategoryFromJsonText(text, key, label) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    setRosterStatus(`Invalid JSON in the ${label} file.`, 'err');
+    return;
+  }
+  const list = extractTeamList(data, key);
+  if (!list) {
+    setRosterStatus(`${label} JSON must be an array of teams (or {"teams": [...]}).`, 'err');
+    return;
+  }
+  const err = validateTeamList(list, label);
+  if (err) {
+    setRosterStatus(err, 'err');
+    return;
+  }
+  if (!customRoster) customRoster = { highSchoolTeams: [], collegeTeams: [], nflTeams: [], rivals: [] };
+  customRoster[key] = list;
+  try { localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(customRoster)); } catch (e) { /* storage unavailable */ }
+  renderSchoolChoices();
+  setRosterStatus(`${label} imported: ${list.length} team(s).`, 'ok');
 }
 
 function applyRoster(data, persist) {
@@ -255,6 +297,7 @@ function showScreen(id) {
 
 let chosenPosition = null;
 let chosenSchoolIndex = null;
+let chosenStars = null;
 
 function initStartScreen() {
   document.querySelectorAll('#positionChoice .choice').forEach((btn) => {
@@ -262,6 +305,15 @@ function initStartScreen() {
       document.querySelectorAll('#positionChoice .choice').forEach((b) => b.classList.remove('selected'));
       btn.classList.add('selected');
       chosenPosition = btn.dataset.value;
+      updateStartButton();
+    });
+  });
+
+  document.querySelectorAll('#starChoice .choice').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#starChoice .choice').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      chosenStars = Number(btn.dataset.value);
       updateStartButton();
     });
   });
@@ -274,7 +326,8 @@ function initStartScreen() {
   el('btnRestart').addEventListener('click', () => {
     chosenPosition = null;
     chosenSchoolIndex = null;
-    document.querySelectorAll('#positionChoice .choice').forEach((b) => b.classList.remove('selected'));
+    chosenStars = null;
+    document.querySelectorAll('#positionChoice .choice, #starChoice .choice').forEach((b) => b.classList.remove('selected'));
     el('playerName').value = '';
     renderSchoolChoices();
     updateStartButton();
@@ -291,15 +344,9 @@ function initStartScreen() {
     }
   });
 
-  el('rosterFile').addEventListener('change', (evt) => {
-    const file = evt.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => handleRosterJsonText(reader.result);
-    reader.onerror = () => setRosterStatus('Could not read that file.', 'err');
-    reader.readAsText(file);
-    evt.target.value = '';
-  });
+  wireCategoryFileInput('rosterFileHS', 'highSchoolTeams', 'High School');
+  wireCategoryFileInput('rosterFileCollege', 'collegeTeams', 'College');
+  wireCategoryFileInput('rosterFileNFL', 'nflTeams', 'Pro');
 
   el('btnPasteJson').addEventListener('click', () => {
     el('rosterPaste').hidden = !el('rosterPaste').hidden;
@@ -311,6 +358,18 @@ function initStartScreen() {
   });
 
   el('btnClearRoster').addEventListener('click', clearRoster);
+}
+
+function wireCategoryFileInput(inputId, key, label) {
+  el(inputId).addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => importCategoryFromJsonText(reader.result, key, label);
+    reader.onerror = () => setRosterStatus(`Could not read the ${label} file.`, 'err');
+    reader.readAsText(file);
+    evt.target.value = '';
+  });
 }
 
 function handleRosterJsonText(text) {
@@ -357,13 +416,16 @@ function renderSchoolChoices() {
 
 function updateStartButton() {
   const nameOk = el('playerName').value.trim().length > 0;
-  el('btnStart').disabled = !(nameOk && chosenPosition && chosenSchoolIndex !== null);
+  el('btnStart').disabled = !(nameOk && chosenPosition && chosenSchoolIndex !== null && chosenStars !== null);
 }
+
+const STAR_LABELS = { 1: 'Longshot', 2: 'Under the Radar', 3: 'Solid Prospect', 4: 'Blue Chip', 5: 'Five-Star Phenom' };
 
 function startCareer() {
   state = freshState();
   state.player.name = el('playerName').value.trim();
   state.player.position = chosenPosition;
+  state.player.startingStars = chosenStars;
 
   const hsTeam = getTeamPool('highSchoolTeams')[chosenSchoolIndex];
   state.team = {
@@ -373,14 +435,16 @@ function startCareer() {
     quality: typeof hsTeam.quality === 'number' ? hsTeam.quality : rand(0.4, 0.6),
   };
 
-  // slight starting bias toward position-relevant attributes
+  // slight starting bias toward position-relevant attributes, shifted by
+  // the chosen star rating (1 = raw talent penalty, 5 = big head start)
+  const starBonus = (chosenStars - 3) * 6;
   const w = POSITIONS[state.player.position].weights;
   for (const k of ['speed', 'strength', 'skill', 'awareness']) {
-    state.player.attrs[k] = clamp(Math.round(35 + w[k] * 60 + rand(-5, 5)), 20, 60);
+    state.player.attrs[k] = clamp(Math.round(35 + w[k] * 60 + starBonus + rand(-5, 5)), 15, 75);
   }
-  state.player.attrs.stamina = randInt(35, 55);
+  state.player.attrs.stamina = clamp(randInt(35, 55) + Math.round(starBonus / 2), 15, 75);
 
-  log(`Welcome to ${escapeHtml(state.team.name)}, ${escapeHtml(state.player.name)}. Your journey to NFL MVP starts now.`, 'highlight');
+  log(`Welcome to ${escapeHtml(state.team.name)}, ${escapeHtml(state.player.name)}. Entering as a ${chosenStars}-star recruit (${STAR_LABELS[chosenStars]}). Your journey to NFL MVP starts now.`, 'highlight');
   showScreen('screen-game');
   beginYear();
 }

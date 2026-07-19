@@ -33,6 +33,17 @@
         <div class="choice-group" id="schoolChoice"></div>
       </div>
 
+      <div class="form-row">
+        <label>Recruit Star Rating</label>
+        <div class="choice-group" id="starChoice">
+          <button class="choice star-choice" data-value="1"><span class="star-stars">⭐</span><small>Longshot</small></button>
+          <button class="choice star-choice" data-value="2"><span class="star-stars">⭐⭐</span><small>Under the Radar</small></button>
+          <button class="choice star-choice" data-value="3"><span class="star-stars">⭐⭐⭐</span><small>Solid Prospect</small></button>
+          <button class="choice star-choice" data-value="4"><span class="star-stars">⭐⭐⭐⭐</span><small>Blue Chip</small></button>
+          <button class="choice star-choice" data-value="5"><span class="star-stars">⭐⭐⭐⭐⭐</span><small>Five-Star Phenom</small></button>
+        </div>
+      </div>
+
       <div class="form-row roster-row">
         <label>Custom Roster (optional)</label>
         <p class="roster-hint">
@@ -41,10 +52,20 @@
         </p>
         <div class="roster-controls">
           <label class="file-btn">
-            Upload roster.json
-            <input type="file" id="rosterFile" accept="application/json,.json" hidden />
+            Import High School Teams
+            <input type="file" id="rosterFileHS" accept="application/json,.json" hidden />
           </label>
-          <button type="button" id="btnPasteJson" class="link-btn">Paste JSON instead</button>
+          <label class="file-btn">
+            Import College Teams
+            <input type="file" id="rosterFileCollege" accept="application/json,.json" hidden />
+          </label>
+          <label class="file-btn">
+            Import Pro Teams
+            <input type="file" id="rosterFileNFL" accept="application/json,.json" hidden />
+          </label>
+        </div>
+        <div class="roster-controls">
+          <button type="button" id="btnPasteJson" class="link-btn">Paste full roster JSON instead</button>
           <button type="button" id="btnClearRoster" class="link-btn">Use default rosters</button>
         </div>
         <textarea id="rosterPaste" class="roster-paste" rows="8" placeholder="Paste roster JSON here..." hidden></textarea>

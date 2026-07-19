@@ -124,6 +124,15 @@ h3 {
   gap: 8px;
 }
 
+.star-choice {
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+}
+.star-choice .star-stars { font-size: 1rem; letter-spacing: 1px; }
+.star-choice small { color: var(--text-dim); font-size: 0.72rem; }
+.star-choice.selected small { color: #10131c; opacity: 0.75; }
+
 /* --- Roster import --- */
 .roster-row { margin-top: 8px; }
 
